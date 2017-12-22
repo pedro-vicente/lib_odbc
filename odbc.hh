@@ -1,0 +1,91 @@
+#ifndef odbc_HH
+#define odbc_HH 1
+
+#ifdef _MSC_VER
+#include <windows.h>
+#endif
+#include <stdlib.h>
+#include <stdio.h>
+#include <sql.h>
+#include <sqlext.h>
+#include <time.h>
+#include <string>
+#include <vector>
+#include <assert.h>
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//row_t
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct row_t
+{
+  std::vector<std::string> col;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//table_t
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class table_t
+{
+public:
+  table_t()
+  {
+
+  }
+  std::vector<std::string> col_name;
+  std::vector<row_t> rows;
+  int to_csv(const std::string &fname);
+  void remove();
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//odbc
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class odbc
+{
+public:
+  odbc();
+  ~odbc();
+  int connect(const std::string &conn);
+  int disconnect();
+  int exec_direct(const std::string &sql);
+  table_t fetch(const std::string &sql);
+  SQLHENV m_henv;
+  SQLHDBC m_hdbc;
+
+private:
+  int get_tables();
+  int get_version();
+
+  struct bind_column_data_t
+  {
+    SQLSMALLINT target_type; //the C data type of the result data
+    SQLPOINTER target_value_ptr; //pointer to storage for the data
+    SQLINTEGER buf_len; //maximum length of the buffer being bound for data (including null-termination byte for char) 
+    SQLLEN strlen_or_ind; //number of bytes(excluding the null termination byte for character data) available
+    //to return in the buffer prior to calling SQLFetch
+  };
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//global functions
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void extract_error(SQLHANDLE handle, SQLSMALLINT type);
+
+std::string make_conn(std::string user,
+  std::string uid,
+  std::string password,
+  std::string server,
+  std::string database);
+
+int list_databases(std::string user,
+  std::string uid,
+  std::string password,
+  std::string server);
+
+
+#endif
+
