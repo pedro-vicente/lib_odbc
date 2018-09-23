@@ -24,7 +24,6 @@ odbc::odbc() :
 
 odbc::~odbc()
 {
-  disconnect();
   SQLFreeHandle(SQL_HANDLE_ENV, m_henv);
 }
 
@@ -37,7 +36,6 @@ int odbc::connect(const std::string &conn)
   SQLCHAR outstr[1024];
   SQLSMALLINT outstrlen;
   SQLCHAR* str_conn = (SQLCHAR*)conn.c_str();
-  std::vector<std::string> tables;
 
   std::cout << conn.c_str() << std::endl;
 
@@ -75,7 +73,6 @@ int odbc::connect(const std::string &conn)
 
   std::cout << outstr << std::endl;
   get_version();
-  get_tables();
   return 0;
 }
 
@@ -94,12 +91,13 @@ int odbc::disconnect()
 //odbc::get_tables
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int odbc::get_tables()
+int odbc::get_tables(int save)
 {
   SQLHSTMT hstmt;
   SQLSMALLINT nbr_cols;
   std::ofstream ofs;
   ofs.open("tables.txt");
+  std::vector<std::string> tables;
 
   if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &hstmt)))
   {
@@ -134,6 +132,10 @@ int odbc::get_tables()
         if (indicator == SQL_NULL_DATA) strcpy(buf, "NULL");
         std::cout << buf;
         ofs << buf;
+        if (idx_col < nbr_cols)
+        {
+          ofs << ",";
+        }
         if (idx_col == 2)
         {
           std::string str(buf);
@@ -144,8 +146,9 @@ int odbc::get_tables()
         }
         else if (idx_col == 3)
         {
-          if (is_dbo)
+          if (is_dbo && save)
           {
+            tables.push_back(buf);
           }
         }
         if (idx_col < nbr_cols)
@@ -161,6 +164,21 @@ int odbc::get_tables()
 
   ofs.close();
   SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
+  if (!save)
+  {
+    return 0;
+  }
+  for (size_t idx_tbl = 0; idx_tbl < tables.size(); idx_tbl++)
+  {
+    std::string file_schema(tables.at(idx_tbl));
+    file_schema += ".schema.txt";
+    std::string file_rows(tables.at(idx_tbl));
+    file_rows += ".csv";
+    std::cout << tables.at(idx_tbl) << "\n";
+    std::string sql = "SELECT * FROM " + tables.at(idx_tbl);
+    table_t table = fetch(sql, file_schema);
+    table.to_csv(file_rows);
+  }
   return 0;
 }
 
@@ -214,6 +232,8 @@ int odbc::exec_direct(const std::string &sql)
   if (!SQL_SUCCEEDED(SQLExecDirect(hstmt, sqlstr, SQL_NTS)))
   {
     extract_error(hstmt, SQL_HANDLE_STMT);
+    std::cout << sql.c_str() << "\n";
+    return -1;
   }
 
   SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
@@ -255,13 +275,23 @@ void extract_error(SQLHANDLE handle, SQLSMALLINT type)
 //odbc::fetch
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-table_t odbc::fetch(const std::string &sql)
+table_t odbc::fetch(const std::string &sql, std::string file_schema)
 {
   SQLHSTMT hstmt;
   SQLSMALLINT nbr_cols;
   SQLCHAR* sqlstr = (SQLCHAR*)sql.c_str();
   struct bind_column_data_t* bind_data = NULL;
   table_t table;
+  std::ofstream ofs;
+  if (file_schema.empty())
+  {
+    ofs.open("schema.txt");
+  }
+  else
+  {
+    ofs.open(file_schema);
+  }
+  int verbose = 0;
 
   if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &hstmt)))
   {
@@ -308,8 +338,21 @@ table_t odbc::fetch(const std::string &sql)
       extract_error(hstmt, SQL_HANDLE_STMT);
     }
 
-    table.col_name.push_back((char*)buf);
+    if (verbose)
+    {
+      std::cout << buf << " " << sqltype << "\t";
+    }
+    ofs << buf << " " << sqltype << "\t";
+    column_t col;
+    col.name = (char*)buf;
+    col.sqltype = sqltype;
+    table.cols.push_back(col);
   }
+  if (verbose)
+  {
+    std::cout << "\n";
+  }
+  ofs << "\n";
 
   for (SQLUSMALLINT idx = 0; idx < nbr_cols; idx++)
   {
@@ -341,6 +384,7 @@ table_t odbc::fetch(const std::string &sql)
     }
   }
 
+  size_t nbr_rows = 0;
   while (SQL_SUCCEEDED(SQLFetch(hstmt)))
   {
     row_t row;
@@ -358,7 +402,14 @@ table_t odbc::fetch(const std::string &sql)
       row.col.push_back(str);
     }
     table.rows.push_back(row);
+    nbr_rows++;
+    if (verbose)
+    {
+      std::cout << nbr_rows << " ";
+    }
   }
+
+out:
 
   for (SQLUSMALLINT idx_col = 0; idx_col < nbr_cols; idx_col++)
   {
@@ -373,6 +424,7 @@ table_t odbc::fetch(const std::string &sql)
   }
   SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
 
+  ofs.close();
   return table;
 }
 
@@ -388,14 +440,14 @@ int table_t::to_csv(const std::string &fname)
     return -1;
   }
 
-  size_t nbr_cols = col_name.size();
+  size_t nbr_cols = cols.size();
   size_t nbr_rows = rows.size();
   for (size_t idx_col = 0; idx_col < nbr_cols; idx_col++)
   {
     char *fmt;
     if (idx_col < nbr_cols - 1) fmt = "%s\t";
     else fmt = "%s\n";
-    fprintf(stream, fmt, col_name.at(idx_col).c_str());
+    fprintf(stream, fmt, cols.at(idx_col).name.c_str());
   }
 
   for (size_t idx_row = 0; idx_row < nbr_rows; idx_row++)
@@ -427,7 +479,7 @@ int table_t::to_csv(const std::string &fname)
 
 void table_t::remove()
 {
-  col_name.clear();
+  cols.clear();
   for (size_t idx_row = 0; idx_row < rows.size(); idx_row++)
   {
     rows.at(idx_row).col.clear();
@@ -441,11 +493,7 @@ void table_t::remove()
 //connect to SQL Server (Windows, Linux)
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::string make_conn(std::string user,
-  std::string uid,
-  std::string password,
-  std::string server,
-  std::string database)
+std::string make_conn(std::string server, std::string database)
 {
   std::string conn;
 #ifdef _MSC_VER
@@ -454,33 +502,10 @@ std::string make_conn(std::string user,
   std::string driver = "DRIVER=ODBC Driver 13 for SQL Server;";
 #endif
 
-  if (!uid.empty() && !user.empty())
-  {
-    return conn;
-  }
-
   conn += driver;
   conn += "SERVER=";
   conn += server;
   conn += ", 1433;";
-  if (!uid.empty())
-  {
-    conn += "UID=";
-    conn += uid;
-    conn += ";";
-    conn += "PWD=";
-    conn += password;
-    conn += ";";
-  }
-  else if (!user.empty())
-  {
-    conn += "User Id=";
-    conn += user;
-    conn += ";";
-    conn += "Password=";
-    conn += password;
-    conn += ";";
-  }
 
   if (!database.empty())
   {
@@ -496,16 +521,13 @@ std::string make_conn(std::string user,
 //list_databases
 ///////////////////////////////////////////////////////////////////////////////
 
-int list_databases(std::string user,
-  std::string uid,
-  std::string password,
-  std::string server)
+int list_databases(std::string server)
 {
   odbc query;
   std::string conn;
   int get_tables = 0;
 
-  conn = make_conn(user, uid, password, server, "master");
+  conn = make_conn(server, "master");
   if (query.connect(conn) < 0)
   {
     return -1;
@@ -537,7 +559,7 @@ int list_databases(std::string user,
     //connect to database
     /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    conn = make_conn(user, uid, password, server, db_name);
+    conn = make_conn(server, db_name);
     if (query.connect(conn) < 0)
     {
       assert(0);

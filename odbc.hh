@@ -15,6 +15,7 @@
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 //row_t
+//a row is a vector of strings
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct row_t
@@ -23,7 +24,19 @@ struct row_t
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+//column_t
+//a column has a name and a SQL type
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct column_t
+{
+  std::string name;
+  SQLSMALLINT sqltype;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
 //table_t
+//a table is a vector with rows, with column information (name, SQL type)
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class table_t
@@ -33,7 +46,7 @@ public:
   {
 
   }
-  std::vector<std::string> col_name;
+  std::vector<column_t> cols;
   std::vector<row_t> rows;
   int to_csv(const std::string &fname);
   void remove();
@@ -51,12 +64,12 @@ public:
   int connect(const std::string &conn);
   int disconnect();
   int exec_direct(const std::string &sql);
-  table_t fetch(const std::string &sql);
+  table_t fetch(const std::string &sql, std::string file_schema = std::string());
   SQLHENV m_henv;
   SQLHDBC m_hdbc;
+  int get_tables(int save);
 
 private:
-  int get_tables();
   int get_version();
 
   struct bind_column_data_t
@@ -75,16 +88,8 @@ private:
 
 void extract_error(SQLHANDLE handle, SQLSMALLINT type);
 
-std::string make_conn(std::string user,
-  std::string uid,
-  std::string password,
-  std::string server,
-  std::string database);
-
-int list_databases(std::string user,
-  std::string uid,
-  std::string password,
-  std::string server);
+std::string make_conn(std::string server, std::string database);
+int list_databases(std::string server);
 
 
 #endif

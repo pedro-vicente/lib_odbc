@@ -21,11 +21,20 @@ read_csv_t::read_csv_t()
 int read_csv_t::open(const std::string &file_name)
 {
   m_ifs.open(file_name.c_str());
-  if (!m_ifs.is_open())
+  if (!m_ifs)
   {
     return -1;
   }
   return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//read_csv_t::close
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void read_csv_t::close()
+{
+  m_ifs.close();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -48,7 +57,11 @@ std::vector<std::string> read_csv_t::read_row()
       //push column if not in quote mode
       /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifdef TAB_SEPARATOR
+    case '\t':
+#else
     case ',':
+#endif
       if (quote_mode == true)
       {
         column += c;
@@ -83,6 +96,8 @@ std::vector<std::string> read_csv_t::read_row()
       }
       else
       {
+        //push last column
+        row.push_back(column);
         return row;
       }
       break;
