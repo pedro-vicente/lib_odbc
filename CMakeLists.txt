@@ -1,6 +1,8 @@
 #CMake build, Pedro Vicente
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.15)
 project (db)
+
+include_directories(sqlite-3.21.0)
 
 #/////////////////////////////////////////////////////////////////////////////////////
 #general C/C++ build flags
@@ -39,8 +41,10 @@ set(sources ${sources} clock.cc)
 set(sources ${sources} odbc.hh)
 set(sources ${sources} odbc.cc)
 
-add_executable(dc311 dc311.cc ${sources})
+add_executable(dc311 dc311.cc ${sources} sqlite-3.21.0/sqlite3.c sqlite-3.21.0/sqlite3.h)
+add_executable(csv_odbc csv_odbc.cc ${sources})
 target_link_libraries (dc311 ${LIB_DEP})
+target_link_libraries (csv_odbc ${LIB_DEP})
 
 
 
