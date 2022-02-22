@@ -1,37 +1,17 @@
 #CMake build, Pedro Vicente
-cmake_minimum_required(VERSION 3.15)
-project (db)
-
-include_directories(sqlite-3.21.0)
-
-#/////////////////////////////////////////////////////////////////////////////////////
-#general C/C++ build flags
-#/////////////////////////////////////////////////////////////////////////////////////
-
+cmake_minimum_required(VERSION 3.19)
 set(CMAKE_BUILD_TYPE Debug)
-set(BUILD_STATIC_LIBS ON)
-set(BUILD_SHARED_LIBS OFF)
+project (db CXX C)
+
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+set(CMAKE_CXX_STANDARD 17)
 
 if (MSVC)
-  add_definitions( "/D_CRT_SECURE_NO_WARNINGS /D_WINSOCK_DEPRECATED_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE" )
-  message("-- Building with static runtime library")
-  set(CMAKE_CXX_FLAGS_DEBUG "/D_DEBUG /MTd /Zi /Ob0 /Od /RTC1")
-  set(CMAKE_CXX_FLAGS_MINSIZEREL     "/MT /O1 /Ob1 /D NDEBUG")
-  set(CMAKE_CXX_FLAGS_RELEASE        "/MT /O2 /Ob2 /D NDEBUG")
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/MT /Zi /O2 /Ob1 /D NDEBUG")
-endif(MSVC)
-
-#//////////////////////////
-# system specific libraries needed to link (assume existing)
-#//////////////////////////
-
-if(MSVC)
-  set(LIB_DEP ${LIB_DEP} ws2_32.lib winmm.lib wldap32.lib odbc32.lib)
+  add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+  add_definitions(-D_CRT_NONSTDC_NO_DEPRECATE)
 endif()
 
-if(UNIX)
-  set(LIB_DEP ${LIB_DEP} odbc)
-endif()
+include_directories(sqlite-3.21.0)
 
 set(sources ${sources})
 set(sources ${sources} csv.hh)
@@ -41,10 +21,33 @@ set(sources ${sources} clock.cc)
 set(sources ${sources} odbc.hh)
 set(sources ${sources} odbc.cc)
 
-add_executable(dc311 dc311.cc ${sources} sqlite-3.21.0/sqlite3.c sqlite-3.21.0/sqlite3.h)
-add_executable(csv_odbc csv_odbc.cc ${sources})
-target_link_libraries (dc311 ${LIB_DEP})
-target_link_libraries (csv_odbc ${LIB_DEP})
+add_library(lib_odbc ${sources})
+
+#//////////////////////////
+#link with libraries
+#lib_dep contains a cascade definition of all the libraries needed to link
+#//////////////////////////
+
+set(lib_dep ${lib_dep})
+set(lib_dep ${lib_dep} lib_odbc)
+
+#//////////////////////////
+# system specific libraries needed to link (assume existing)
+#//////////////////////////
+
+if(MSVC)
+  set(lib_dep ${lib_dep} odbc32.lib)
+elseif(UNIX)
+  set(lib_dep ${lib_dep} odbc)
+endif()
+
+add_executable(insert insert.cc)
+add_executable(csv_odbc csv_odbc.cc)
+add_executable(dc311 dc311.cc sqlite-3.21.0/sqlite3.c sqlite-3.21.0/sqlite3.h)
+
+target_link_libraries (insert ${lib_dep})
+target_link_libraries (dc311 ${lib_dep})
+target_link_libraries (csv_odbc ${lib_dep})
 
 
 

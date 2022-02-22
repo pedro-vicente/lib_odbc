@@ -1,0 +1,21 @@
+#include "odbc.hh"
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//main
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int main()
+{
+  std::string server("localhost");
+  std::string database("test_db");
+
+  odbc query;
+  std::string conn = make_conn(server, database);
+  if (query.connect(conn) < 0)
+  {
+    assert(0);
+  }
+
+  query.disconnect();
+  return 0;
+}
