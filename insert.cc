@@ -49,7 +49,7 @@ int main()
   {
   }
 
-  table_t table = query.fetch("SELECT * FROM [Persons];");
+  table_t table = query.fetch("SELECT * FROM [Persons] ORDER BY [Id];");
 
   for (size_t idx_row = 0; idx_row < table.rows.size(); idx_row++)
   {
