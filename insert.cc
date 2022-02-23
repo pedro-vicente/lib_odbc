@@ -11,6 +11,7 @@ int main()
   std::string server("localhost");
   std::string database("test_db");
 
+
   odbc query;
   std::string conn = make_conn(server, database);
   if (query.connect(conn) < 0)
@@ -33,12 +34,17 @@ int main()
   {
   }
 
-  sql = "INSERT INTO Persons ([Id], [Name], [Adress], [Time]) VALUES (1, 'Susan ', '456 Bee Rd.', '2022-02-22');";
+  sql = "INSERT INTO Persons ([Id], [Name], [Adress], [Time]) VALUES (1, 'Susan', '456 Bee Rd.', '2022-02-22');";
   if (query.exec_direct(sql) < 0)
   {
   }
 
-  sql = "INSERT INTO Persons ([Id], [Name], [Adress], [Time]) VALUES (1, NULL, NULL, NULL);";
+  sql = "INSERT INTO Persons ([Id], [Name], [Adress], [Time]) VALUES (2, '', '', '');";
+  if (query.exec_direct(sql) < 0)
+  {
+  }
+
+  sql = "INSERT INTO Persons ([Id], [Name], [Adress], [Time]) VALUES (3, NULL, NULL, NULL);";
   if (query.exec_direct(sql) < 0)
   {
   }
