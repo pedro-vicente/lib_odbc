@@ -21,7 +21,7 @@ Usage
 
 ## API
 
-'''cpp
+```cpp
  int connect(const std::string& conn);
  int disconnect();
  int exec_direct(const std::string& sql);
@@ -30,32 +30,32 @@ Usage
  int set_manual();
  int commit_transaction();
  int rollback_transaction();
-'''
+```
 
 ## Table structures
 
 A row is a vector of strings
 
-'''cpp
+```cpp
 struct row_t
 {
   std::vector<std::string> col;
 };
-'''
+```
 
 A column has a name and a SQL type
 
-'''cpp
+```cpp
 struct column_t
 {
   std::string name;
   SQLSMALLINT sqltype;
 };
-'''
+```
 
 A table is a vector with rows, with column information (name, SQL type)
 
-'''cpp
+```cpp
 class table_t
 {
 public:
@@ -70,7 +70,7 @@ public:
 
   int to_csv(const std::string& fname);
 };
-'''
+```
 
 Example
 ----
