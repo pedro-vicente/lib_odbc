@@ -4,19 +4,21 @@
 #include <iostream>
 #include "sqlite3.h"
 
-int dc311_csv_to_sqlite(const std::string &name);
-int dc311_csv_to_odbc(const std::string &name, odbc &query);
+int dc311_csv_to_sqlite(const std::string& name);
+int dc311_csv_to_odbc(const std::string& name, odbc& query);
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 //usage
-//-s 127.0.0.1 -u pedro -p <password> -d dc311 -f dc_311-2016_100.csv
-//-s 127.0.0.1 -u pedro -p <password> -d dc311 -q "SELECT * FROM [dc_311-2016_100]"
+//Note: database name [dc311] must be created in before running this program
+//-S localhost -d dc311 -f dc_311-2016_100.csv
+//-S 127.0.0.1 -u pedro -p <password> -d dc311 -f dc_311-2016_100.csv
+//-S 127.0.0.1 -u pedro -p <password> -d dc311 -q "SELECT * FROM [dc_311-2016_100]"
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void usage()
 {
-  std::cout << "usage: ./dc311 -s SERVER -u USER OR -i UID -p PASSWORD <-d DATABASE> <-f CSV> <-q STATEMENT> " << std::endl;
-  std::cout << "-s SERVER: server IP adress or localhost" << std::endl;
+  std::cout << "usage: ./dc311 -S SERVER -d DATABASE <-u USER OR -i UID> <-p PASSWORD> <-f CSV> <-q STATEMENT> " << std::endl;
+  std::cout << "-S SERVER: server IP address or localhost" << std::endl;
   std::cout << "-u USER: user name" << std::endl;
   std::cout << "-i UID: user ID" << std::endl;
   std::cout << "-p PASSWORD: password" << std::endl;
@@ -30,7 +32,7 @@ void usage()
 //main
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
   std::string user;
   std::string uid;
@@ -67,7 +69,7 @@ int main(int argc, char *argv[])
         password = argv[i + 1];
         i++;
         break;
-      case 's':
+      case 'S':
         server = argv[i + 1];
         i++;
         break;
@@ -98,12 +100,11 @@ int main(int argc, char *argv[])
     }
   }
 
-  if (server.empty())
+  if (server.empty() || database.empty())
   {
     usage();
   }
 
- 
   /////////////////////////////////////////////////////////////////////////////////////////////////////
   //do a SQLite database
   /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -122,8 +123,13 @@ int main(int argc, char *argv[])
   /////////////////////////////////////////////////////////////////////////////////////////////////////
 
   odbc query;
+
   std::string conn = make_conn(server, database);
-  query.connect(conn);
+  if (query.connect(conn) < 0)
+  {
+    assert(0);
+  }
+
   if (!file_name.empty())
   {
     if (dc311_csv_to_odbc(file_name, query) < 0)
@@ -134,7 +140,14 @@ int main(int argc, char *argv[])
   }
   if (!sql.empty())
   {
-    table_t table = query.fetch(sql);
+
+    table_t table;
+    std::cout << sql << std::endl;
+    if (query.fetch(sql, table) < 0)
+    {
+      assert(0);
+    }
+
     std::string fname(database);
     database += ".csv";
     table.to_csv(database);
@@ -148,7 +161,7 @@ int main(int argc, char *argv[])
 //dc311_csv_to_odbc
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int dc311_csv_to_odbc(const std::string &name, odbc &query)
+int dc311_csv_to_odbc(const std::string& name, odbc& query)
 {
   clock_gettime_t timer;
   read_csv_t csv;
@@ -195,7 +208,10 @@ int dc311_csv_to_odbc(const std::string &name, odbc &query)
   sql += table;
   sql += " ;";
 
-  query.exec_direct(sql);
+  if (query.exec_direct(sql) < 0)
+  {
+    assert(0);
+  }
 
   sql = "CREATE TABLE ";
   sql += table;
@@ -237,7 +253,10 @@ int dc311_csv_to_odbc(const std::string &name, odbc &query)
   sql += " );";
 
   std::cout << sql << std::endl;
-  query.exec_direct(sql);
+  if (query.exec_direct(sql) < 0)
+  {
+    assert(0);
+  }
 
   /////////////////////////////////////////////////////////////////////////////////////////////////////
   //iterate until an empty row is returned (end of file)
@@ -342,7 +361,10 @@ int dc311_csv_to_odbc(const std::string &name, odbc &query)
     sql += " );";
 
     std::cout << sql << std::endl;
-    query.exec_direct(sql);
+    if (query.exec_direct(sql) < 0)
+    {
+      assert(0);
+    }
     nbr_rows++;
   }
 
@@ -361,7 +383,7 @@ int dc311_csv_to_odbc(const std::string &name, odbc &query)
 //storing dates and times as TEXT, REAL, or INTEGER values:
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int dc311_csv_to_sqlite(const std::string &name)
+int dc311_csv_to_sqlite(const std::string& name)
 {
   clock_gettime_t timer;
   read_csv_t csv;
@@ -369,8 +391,8 @@ int dc311_csv_to_sqlite(const std::string &name)
   std::vector<std::string> row;
   size_t nbr_cols;
   std::string sql;
-  sqlite3 *db = 0;
-  char *msg = 0;
+  sqlite3* db = 0;
+  char* msg = 0;
 
   if (csv.open(name) < 0)
   {

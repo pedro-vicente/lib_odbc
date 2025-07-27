@@ -4,13 +4,13 @@
 #include <iostream>
 
 std::string sqlserver_type(SQLSMALLINT sqltype);
-std::string sqlserver_type_data(SQLSMALLINT sqltype, const std::string &col_value);
-int csv_to_odbc(const std::string &fname_csv, odbc &query, const std::string &information_schema_columns);
+std::string sqlserver_type_data(SQLSMALLINT sqltype, const std::string& col_value);
+int csv_to_odbc(const std::string& fname_csv, odbc& query, const std::string& information_schema_columns);
 
 void usage()
 {
-  std::cout << "usage: ./csv_odbc -s SERVER -u USER OR -i UID -p PASSWORD <-d DATABASE> <-f CSV> <-x SCHEMA> <-q STATEMENT> " << std::endl;
-  std::cout << "-s SERVER: server IP adress or localhost" << std::endl;
+  std::cout << "usage: ./csv_odbc -S SERVER -u USER OR -i UID -p PASSWORD <-d DATABASE> <-f CSV> <-x SCHEMA> <-q STATEMENT> " << std::endl;
+  std::cout << "-S SERVER: server IP address or localhost" << std::endl;
   std::cout << "-u USER: user name" << std::endl;
   std::cout << "-i UID: user ID" << std::endl;
   std::cout << "-p PASSWORD: password" << std::endl;
@@ -25,7 +25,7 @@ void usage()
 //main
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
   std::string user;
   std::string uid;
@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
         password = argv[i + 1];
         i++;
         break;
-      case 's':
+      case 'S':
         server = argv[i + 1];
         i++;
         break;
@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  if (server.empty())
+  if (server.empty() || database.empty())
   {
     usage();
   }
@@ -120,7 +120,14 @@ int main(int argc, char *argv[])
   }
   if (!sql.empty())
   {
-    table_t table = query.fetch(sql);
+    table_t table;
+
+    std::cout << sql << std::endl;
+    if (query.fetch(sql, table) < 0)
+    {
+      assert(0);
+    }
+
     std::string fname(database);
     database += ".csv";
     table.to_csv(database);
@@ -134,7 +141,7 @@ int main(int argc, char *argv[])
 //csv_to_odbc
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int csv_to_odbc(const std::string &fname_csv, odbc &query, const std::string &information_schema_columns)
+int csv_to_odbc(const std::string& fname_csv, odbc& query, const std::string& information_schema_columns)
 {
   clock_gettime_t timer;
   read_csv_t csv;
@@ -413,7 +420,7 @@ std::string sqlserver_type(SQLSMALLINT sqltype)
   return str;
 }
 
-std::string sqlserver_type_data(SQLSMALLINT sqltype, const std::string &col)
+std::string sqlserver_type_data(SQLSMALLINT sqltype, const std::string& col)
 {
   std::string sql;
 

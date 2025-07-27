@@ -11,7 +11,6 @@ int main()
   std::string server("localhost");
   std::string database("test_db");
 
-
   odbc query;
   std::string conn = make_conn(server, database);
   if (query.connect(conn) < 0)
@@ -19,37 +18,49 @@ int main()
     assert(0);
   }
 
-  sql = "CREATE TABLE Persons ([Id] [int] NOT NULL, [Name] [char](36) NULL, [Adress] [varchar](100) NULL, [Time] [datetime] NULL);";
+  sql = "CREATE TABLE Persons ([Id] [int] NOT NULL, [Name] [char](36) NULL, [Address] [varchar](100) NULL, [Time] [datetime] NULL);";
   if (query.exec_direct(sql) < 0)
   {
+
   }
 
   sql = "DELETE FROM Persons;";
   if (query.exec_direct(sql) < 0)
   {
+
   }
 
-  sql = "INSERT INTO Persons ([Id], [Name], [Adress], [Time]) VALUES (0, 'Bob', '123 Tree Rd.', '2022-02-22');";
+  sql = "INSERT INTO Persons ([Id], [Name], [Address], [Time]) VALUES (0, 'Bob', '123 Tree Rd.', '2022-02-22');";
   if (query.exec_direct(sql) < 0)
   {
+    assert(0);
   }
 
-  sql = "INSERT INTO Persons ([Id], [Name], [Adress], [Time]) VALUES (1, 'Susan', '456 Bee Rd.', '2022-02-22');";
+  sql = "INSERT INTO Persons ([Id], [Name], [Address], [Time]) VALUES (1, 'Susan', '456 Bee Rd.', '2022-02-22');";
   if (query.exec_direct(sql) < 0)
   {
+    assert(0);
   }
 
-  sql = "INSERT INTO Persons ([Id], [Name], [Adress], [Time]) VALUES (2, '', '', '');";
+  sql = "INSERT INTO Persons ([Id], [Name], [Address], [Time]) VALUES (2, '', '', '');";
   if (query.exec_direct(sql) < 0)
   {
+    assert(0);
   }
 
-  sql = "INSERT INTO Persons ([Id], [Name], [Adress], [Time]) VALUES (3, NULL, NULL, NULL);";
+  sql = "INSERT INTO Persons ([Id], [Name], [Address], [Time]) VALUES (3, NULL, NULL, NULL);";
   if (query.exec_direct(sql) < 0)
   {
+    assert(0);
   }
 
-  table_t table = query.fetch("SELECT * FROM [Persons] ORDER BY [Id];");
+  table_t table;
+  sql = "SELECT * FROM [Persons] ORDER BY [Id];";
+  std::cout << sql << std::endl;
+  if (query.fetch(sql, table) < 0)
+  {
+    assert(0);
+  }
 
   for (size_t idx_row = 0; idx_row < table.rows.size(); idx_row++)
   {

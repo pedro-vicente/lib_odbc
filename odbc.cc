@@ -1,11 +1,19 @@
 #include "odbc.hh"
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <iomanip>
 #include <stdexcept>
 
+#ifdef _MSC_VER
+std::string default_driver = "DRIVER={SQL Server};";
+#else
+std::string default_driver = "DRIVER=ODBC Driver 17 for SQL Server;";
+#endif
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 //odbc::odbc
+//Open Database Connectivity wrapper
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 odbc::odbc() :
@@ -31,21 +39,20 @@ odbc::~odbc()
 //odbc::connect
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int odbc::connect(const std::string &conn)
+int odbc::connect(const std::string& conn)
 {
   SQLCHAR outstr[1024];
   SQLSMALLINT outstrlen;
   SQLCHAR* str_conn = (SQLCHAR*)conn.c_str();
 
-  std::cout << conn.c_str() << std::endl;
-
-  if (!SQL_SUCCEEDED(SQLSetEnvAttr(m_henv, SQL_ATTR_ODBC_VERSION, (void *)SQL_OV_ODBC3, 0)))
+  if (!SQL_SUCCEEDED(SQLSetEnvAttr(m_henv, SQL_ATTR_ODBC_VERSION, (void*)SQL_OV_ODBC3, 0)))
   {
 
   }
   if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_DBC, m_henv, &m_hdbc)))
   {
-
+    extract_error(m_henv, SQL_HANDLE_ENV);
+    return -1;
   }
 
   switch (SQLDriverConnect(
@@ -63,15 +70,19 @@ int odbc::connect(const std::string &conn)
   case SQL_SUCCESS_WITH_INFO:
     break;
   case SQL_INVALID_HANDLE:
+    return -1;
+    break;
   case SQL_ERROR:
     extract_error(m_hdbc, SQL_HANDLE_DBC);
+    SQLFreeHandle(SQL_HANDLE_DBC, m_hdbc);
+    m_hdbc = 0;
     return -1;
     break;
   default:
     break;
   }
 
-  std::cout << outstr << std::endl;
+  std::cout << reinterpret_cast<const char*>(outstr) << std::endl;
   get_version();
   return 0;
 }
@@ -84,101 +95,6 @@ int odbc::disconnect()
 {
   SQLDisconnect(m_hdbc);
   SQLFreeHandle(SQL_HANDLE_DBC, m_hdbc);
-  return 0;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-//odbc::get_tables
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-
-int odbc::get_tables(int save)
-{
-  SQLHSTMT hstmt;
-  SQLSMALLINT nbr_cols;
-  std::ofstream ofs;
-  ofs.open("tables.txt");
-  std::vector<std::string> tables;
-
-  if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &hstmt)))
-  {
-
-  }
-
-  if (!SQL_SUCCEEDED(SQLTables(hstmt,
-    NULL, 0, // no specific catalog 
-    NULL, 0, // no specific schema 
-    NULL, 0, // no specific table
-    (SQLCHAR*)"TABLE", SQL_NTS))) // only tables, no views 
-  {
-
-  }
-
-  if (!SQL_SUCCEEDED(SQLNumResultCols(hstmt, &nbr_cols)))
-  {
-
-  }
-
-  while (SQL_SUCCEEDED(SQLFetch(hstmt)))
-  {
-    bool is_dbo = false;
-    for (SQLUSMALLINT idx_col = 1; idx_col <= nbr_cols; idx_col++)
-    {
-      SQLLEN indicator;
-      char buf[512];
-
-      //retrieve column data as a string
-      if (SQL_SUCCEEDED(SQLGetData(hstmt, idx_col, SQL_C_CHAR, buf, sizeof(buf), &indicator)))
-      {
-        if (indicator == SQL_NULL_DATA) strcpy(buf, "NULL");
-        std::cout << buf;
-        ofs << buf;
-        if (idx_col < nbr_cols)
-        {
-          ofs << ",";
-        }
-        if (idx_col == 2)
-        {
-          std::string str(buf);
-          if (str.compare("dbo") == 0)
-          {
-            is_dbo = true;
-          }
-        }
-        else if (idx_col == 3)
-        {
-          if (is_dbo && save)
-          {
-            tables.push_back(buf);
-          }
-        }
-        if (idx_col < nbr_cols)
-        {
-          std::cout << std::setw(25);
-          ofs << std::setw(25);
-        }
-      }
-    }
-    std::cout << std::endl;
-    ofs << std::endl;
-  }
-
-  ofs.close();
-  SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
-  if (!save)
-  {
-    return 0;
-  }
-  for (size_t idx_tbl = 0; idx_tbl < tables.size(); idx_tbl++)
-  {
-    std::string file_schema(tables.at(idx_tbl));
-    file_schema += ".schema.txt";
-    std::string file_rows(tables.at(idx_tbl));
-    file_rows += ".csv";
-    std::cout << tables.at(idx_tbl) << "\n";
-    std::string sql = "SELECT * FROM " + tables.at(idx_tbl);
-    table_t table = fetch(sql, file_schema);
-    table.to_csv(file_rows);
-  }
   return 0;
 }
 
@@ -196,7 +112,7 @@ int odbc::get_version()
 
   }
 
-  if (!SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*) "SELECT @@Version", SQL_NTS)))
+  if (!SQL_SUCCEEDED(SQLExecDirect(hstmt, (SQLCHAR*)"SELECT @@Version", SQL_NTS)))
   {
 
   }
@@ -208,31 +124,104 @@ int odbc::get_version()
 
   while (SQL_SUCCEEDED(SQLFetch(hstmt)))
   {
-    std::cout << str;
+    std::cout << reinterpret_cast<const char*>(str) << std::endl;
   }
-  std::cout << std::endl;
   SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
   return 0;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
-//odbc::exec_direct
+//odbc::set_auto_commit
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int odbc::exec_direct(const std::string &sql)
+int odbc::set_auto_commit()
 {
+  if (!SQL_SUCCEEDED(SQLSetConnectAttr(m_hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)TRUE, 0)))
+  {
+    return -1;
+  }
+  return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//odbc::set_manual
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int odbc::set_manual()
+{
+  if (!SQL_SUCCEEDED(SQLSetConnectAttr(m_hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)FALSE, 0)))
+  {
+    return -1;
+  }
+  return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//odbc::commit_transaction
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int odbc::commit_transaction()
+{
+  if (!SQL_SUCCEEDED(SQLEndTran(SQL_HANDLE_DBC, m_hdbc, SQL_COMMIT)))
+  {
+    return -1;
+  }
+  return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//odbc::rollback_transaction
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int odbc::rollback_transaction()
+{
+  if (!SQL_SUCCEEDED(SQLEndTran(SQL_HANDLE_DBC, m_hdbc, SQL_ROLLBACK)))
+  {
+    return -1;
+  }
+  return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//odbc::exec_direct
+//return values from SQLExecDirect
+//SQL_SUCCESS, 
+//SQL_SUCCESS_WITH_INFO, 
+//SQL_NEED_DATA, 
+//SQL_STILL_EXECUTING,
+//SQL_ERROR, 
+//SQL_NO_DATA, 
+//SQL_INVALID_HANDLE, 
+//SQL_PARAM_DATA_AVAILABLE
+//If SQLExecDirect executes a searched update, insert, or delete statement that does not affect any rows at the data source, 
+//the call to SQLExecDirect returns SQL_NO_DATA.
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int odbc::exec_direct(const std::string& sql)
+{
+  //find incorrect NULL insertions (quoted); use function 'check_tables_for_NULL()' to detect 
+  size_t pos = sql.find("'NULL'");
+  if (pos != std::string::npos)
+  {
+    std::cout << sql << std::endl;
+  }
+
+  std::cout << sql << std::endl;
   SQLHSTMT hstmt;
   SQLCHAR* sqlstr = (SQLCHAR*)sql.c_str();
 
   if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &hstmt)))
   {
-
   }
 
-  if (!SQL_SUCCEEDED(SQLExecDirect(hstmt, sqlstr, SQL_NTS)))
+  SQLRETURN rc = SQLExecDirect(hstmt, sqlstr, SQL_NTS);
+  if (rc == SQL_SUCCESS || rc == SQL_SUCCESS_WITH_INFO || rc == SQL_NO_DATA)
+  {
+  }
+  else
   {
     extract_error(hstmt, SQL_HANDLE_STMT);
-    std::cout << sql.c_str() << "\n";
+    SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
     return -1;
   }
 
@@ -265,7 +254,9 @@ void extract_error(SQLHANDLE handle, SQLSMALLINT type)
       &str_len);
     if (SQL_SUCCEEDED(rc))
     {
-      printf("%s:%ld:%ld:%s\n", sql_state, (long)idx, (long)native_error, str);
+      std::stringstream ss;
+      ss << idx << ":" << sql_state << ":" << native_error << ":" << str;
+      std::cout << ss.str().c_str() << std::endl;
     }
   } while (rc == SQL_SUCCESS);
 }
@@ -275,23 +266,14 @@ void extract_error(SQLHANDLE handle, SQLSMALLINT type)
 //odbc::fetch
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-table_t odbc::fetch(const std::string &sql, std::string file_schema)
+int odbc::fetch(const std::string& sql, table_t& table)
 {
+  table.remove();
+  std::cout << sql << std::endl;
   SQLHSTMT hstmt;
   SQLSMALLINT nbr_cols;
   SQLCHAR* sqlstr = (SQLCHAR*)sql.c_str();
   struct bind_column_data_t* bind_data = NULL;
-  table_t table;
-  std::ofstream ofs;
-  if (file_schema.empty())
-  {
-    ofs.open("schema.txt");
-  }
-  else
-  {
-    ofs.open(file_schema);
-  }
-  int verbose = 0;
 
   if (!SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &hstmt)))
   {
@@ -301,7 +283,7 @@ table_t odbc::fetch(const std::string &sql, std::string file_schema)
   if (!SQL_SUCCEEDED(SQLExecDirect(hstmt, sqlstr, SQL_NTS)))
   {
     extract_error(hstmt, SQL_HANDLE_STMT);
-    return table;
+    return -1;
   }
 
   if (!SQL_SUCCEEDED(SQLNumResultCols(hstmt, &nbr_cols)))
@@ -314,6 +296,10 @@ table_t odbc::fetch(const std::string &sql, std::string file_schema)
   {
     bind_data[idx].target_value_ptr = NULL;
   }
+
+  /////////////////////////////////////////////////////////////////////////////////////////////////////
+  //get column names
+  /////////////////////////////////////////////////////////////////////////////////////////////////////
 
   for (SQLUSMALLINT idx = 0; idx < nbr_cols; idx++)
   {
@@ -338,35 +324,25 @@ table_t odbc::fetch(const std::string &sql, std::string file_schema)
       extract_error(hstmt, SQL_HANDLE_STMT);
     }
 
-    if (verbose)
-    {
-      std::cout << buf << " " << sqltype << "\t";
-    }
-    ofs << buf << " " << sqltype << "\t";
     column_t col;
     col.name = (char*)buf;
     col.sqltype = sqltype;
     table.cols.push_back(col);
   }
-  if (verbose)
-  {
-    std::cout << "\n";
-  }
-  ofs << "\n";
 
   for (SQLUSMALLINT idx = 0; idx < nbr_cols; idx++)
   {
     bind_data[idx].target_type = SQL_C_CHAR;
     bind_data[idx].buf_len = (1024 + 1);
-    bind_data[idx].target_value_ptr = malloc(sizeof(unsigned char)*bind_data[idx].buf_len);
+    bind_data[idx].target_value_ptr = malloc(sizeof(unsigned char) * bind_data[idx].buf_len);
   }
 
   /////////////////////////////////////////////////////////////////////////////////////////////////////
-  //SQLBindCol assigns the storage and data type for a column in a result set, 
+  //SQLBindCol assigns the storage and data type for a column in a result set,
   //including:
   //a storage buffer that will receive the contents of a column of data
   //the length of the storage buffer
-  //a storage location that will receive the actual length of the column of data 
+  //a storage location that will receive the actual length of the column of data
   //returned by the fetch operation data type conversion
   /////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -393,23 +369,17 @@ table_t odbc::fetch(const std::string &sql, std::string file_schema)
       std::string str;
       if (bind_data[idx_col].strlen_or_ind != SQL_NULL_DATA)
       {
-        str = (char *)bind_data[idx_col].target_value_ptr;
+        str = (char*)bind_data[idx_col].target_value_ptr;
       }
       else
       {
-        str = "NULL";
+        str = ODBC::SQL_NULL;
       }
       row.col.push_back(str);
     }
     table.rows.push_back(row);
     nbr_rows++;
-    if (verbose)
-    {
-      std::cout << nbr_rows << " ";
-    }
   }
-
-out:
 
   for (SQLUSMALLINT idx_col = 0; idx_col < nbr_cols; idx_col++)
   {
@@ -423,53 +393,6 @@ out:
     free(bind_data);
   }
   SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
-
-  ofs.close();
-  return table;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-//table_t::to_csv
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-
-int table_t::to_csv(const std::string &fname)
-{
-  FILE *stream = fopen(fname.c_str(), "w");
-  if (stream == NULL)
-  {
-    return -1;
-  }
-
-  size_t nbr_cols = cols.size();
-  size_t nbr_rows = rows.size();
-  for (size_t idx_col = 0; idx_col < nbr_cols; idx_col++)
-  {
-    char *fmt;
-    if (idx_col < nbr_cols - 1) fmt = "%s\t";
-    else fmt = "%s\n";
-    fprintf(stream, fmt, cols.at(idx_col).name.c_str());
-  }
-
-  for (size_t idx_row = 0; idx_row < nbr_rows; idx_row++)
-  {
-    for (size_t idx_col = 0; idx_col < nbr_cols; idx_col++)
-    {
-      std::string col = rows.at(idx_row).col.at(idx_col);
-      std::size_t found = col.find('\n');
-      if (found != std::string::npos)
-      {
-        col.insert(0, "\"");
-        col.append("\"");
-      }
-      fprintf(stream, "%s", col.c_str());
-      char *buf;
-      if (idx_col < nbr_cols - 1) buf = "\t";
-      else buf = "\n";
-      fprintf(stream, buf);
-    }
-  }
-
-  fclose(stream);
   return 0;
 }
 
@@ -487,25 +410,56 @@ void table_t::remove()
   rows.clear();
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//table_t::get_row_col_value
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+std::string table_t::get_row_col_value(int row, const std::string& col_name)
+{
+  int col_num = -1;
+  for (int c = 0; c < cols.size(); c++)
+  {
+    if (cols.at(c).name.compare(col_name) == 0)
+    {
+      col_num = c;
+      break;
+    }
+  }
+  return std::string(rows.at(row).col.at(col_num));
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 //make_conn
-//connect to SQL Server (Windows, Linux)
+//make connection string without DNS (Windows, Linux)
+//Driver=ODBC Driver 17 for SQL Server;Server=tcp:localhost,1433;UID=my_username;PWD=my_password
+//To allow services to connect user 'NT AUTHORITY\SYSTEM', in SQL Server Management Studio:
+// 1. Security->Logins->NT AUTHORITY\SYSTEM
+// 2. Properties->Server roles.
+// 3. check 'sysadmin'
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::string make_conn(std::string server, std::string database)
+std::string make_conn(const std::string& server, const std::string& database, std::string user, std::string password)
 {
   std::string conn;
-#ifdef _MSC_VER
-  std::string driver = "DRIVER={SQL Server};";
-#else
-  std::string driver = "DRIVER=ODBC Driver 13 for SQL Server;";
-#endif
+  conn += default_driver;
 
-  conn += driver;
   conn += "SERVER=";
   conn += server;
   conn += ", 1433;";
+
+  if (!user.empty())
+  {
+    conn += "UID=";
+    conn += user;
+    conn += ";";
+  }
+
+  if (!password.empty())
+  {
+    conn += "PWD=";
+    conn += password;
+    conn += ";";
+  }
 
   if (!database.empty())
   {
@@ -514,8 +468,16 @@ std::string make_conn(std::string server, std::string database)
     conn += ";";
   }
 
+  if (!password.empty())
+  {
+    conn += "Trusted_Connection=False;";
+    conn += "Integrated Security=False;";
+  }
+
+  std::cout << conn << std::endl;
   return conn;
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////
 //list_databases
@@ -537,10 +499,17 @@ int list_databases(std::string server)
   //list all databases
   /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  table_t dbs = query.fetch("SELECT [name] FROM sys.databases d WHERE d.database_id > 6");
+  table_t table;
+  std::string sql("SELECT [name] FROM sys.databases d WHERE d.database_id > 6");
+  std::cout << sql << std::endl;
+  if (query.fetch(sql, table) < 0)
+  {
+    assert(0);
+  }
+
   query.disconnect();
 
-  size_t nbr_dbs = dbs.rows.size();
+  size_t nbr_dbs = table.rows.size();
   std::cout << "Databases: " << nbr_dbs << '\n';
 
   /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -550,7 +519,7 @@ int list_databases(std::string server)
 
   for (size_t idx = 0; idx < nbr_dbs; idx++)
   {
-    row_t row = dbs.rows.at(idx);
+    row_t row = table.rows.at(idx);
     assert(row.col.size() == 1);
     std::string db_name = row.col.at(0);
     std::cout << db_name.c_str() << '\n';
@@ -570,7 +539,12 @@ int list_databases(std::string server)
     sql += db_name;
     sql += ".information_schema.tables WHERE table_type = 'base table'";
 
-    table_t tbl_db = query.fetch(sql);
+    table_t tbl_db;
+    if (query.fetch(sql, tbl_db) < 0)
+    {
+      assert(0);
+    }
+
     size_t nbr_tbl = tbl_db.rows.size();
     std::cout << "Tables: " << nbr_tbl << '\n';
 
@@ -589,7 +563,11 @@ int list_databases(std::string server)
         sql = "SELECT * FROM [";
         sql += tbl_name;
         sql += "]";
-        table_t tbl = query.fetch(sql);
+        table_t tbl;
+        if (query.fetch(sql, tbl) < 0)
+        {
+          assert(0);
+        }
         std::string fname(tbl_name);
         fname += ".table.csv";
         tbl.to_csv(fname);
@@ -602,3 +580,48 @@ int list_databases(std::string server)
   return 0;
 }
 
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//table_t::to_csv
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int table_t::to_csv(const std::string& fname)
+{
+  FILE* stream = fopen(fname.c_str(), "w");
+  if (stream == NULL)
+  {
+    return -1;
+  }
+
+  size_t nbr_cols = cols.size();
+  size_t nbr_rows = rows.size();
+  for (size_t idx_col = 0; idx_col < nbr_cols; idx_col++)
+  {
+    char* fmt;
+    if (idx_col < nbr_cols - 1) fmt = "%s\t";
+    else fmt = "%s\n";
+    fprintf(stream, fmt, cols.at(idx_col).name.c_str());
+  }
+
+  for (size_t idx_row = 0; idx_row < nbr_rows; idx_row++)
+  {
+    for (size_t idx_col = 0; idx_col < nbr_cols; idx_col++)
+    {
+      std::string col = rows.at(idx_row).col.at(idx_col);
+      std::size_t found = col.find('\n');
+      if (found != std::string::npos)
+      {
+        col.insert(0, "\"");
+        col.append("\"");
+      }
+      fprintf(stream, "%s", col.c_str());
+      char* buf;
+      if (idx_col < nbr_cols - 1) buf = "\t";
+      else buf = "\n";
+      fprintf(stream, buf);
+    }
+  }
+
+  fclose(stream);
+  return 0;
+}
