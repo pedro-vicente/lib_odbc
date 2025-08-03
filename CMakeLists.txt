@@ -21,6 +21,7 @@ set(src ${src} clock.cc)
 set(src ${src} odbc.hh)
 set(src ${src} odbc.cc)
 set(src ${src} table.hh)
+set(src ${src} table.cc)
 
 add_library(lib_odbc ${src})
 
